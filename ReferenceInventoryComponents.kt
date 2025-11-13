@@ -258,8 +258,7 @@ fun SendInventoryButton(
                 TextButton(onClick = { openDialog.value = false }) {
                     Text("Annuler")
                 }
-            },
-            icon = { Icon(Icons.Default.Info, contentDescription = null) }
+            }
         )
     }
 }
