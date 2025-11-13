@@ -1,7 +1,5 @@
 package com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,353 +7,266 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.veoneer.logisticinventoryapp.core.data.api.TracabilityDAO
-import com.veoneer.logisticinventoryapp.core.domain.model.InventoryState
-import com.veoneer.logisticinventoryapp.core.domain.model.InventoryType
-import com.veoneer.logisticinventoryapp.core.domain.model.MovexReferenceInventory
-import com.veoneer.logisticinventoryapp.core.domain.model.RefInventoryStepEnum
-import com.veoneer.logisticinventoryapp.core.domain.model.Reference
+import com.veoneer.logisticinventoryapp.core.domain.model.Family
 import com.veoneer.logisticinventoryapp.core.domain.repository.InventoryRepository
 import com.veoneer.logisticinventoryapp.core.domain.repository.RefRepository
 import com.veoneer.logisticinventoryapp.core.service.MainService
-import com.veoneer.logisticinventoryapp.core.utils.toBase64
-import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.domain.use_case.NumberOfRefIsValidUseCase
-import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation.state.referenceInventoryState
+import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.domain.use_case.ScanBarcodeUseCase
+import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.domain.use_case.SendInventoryUseCase
+import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.domain.use_case.ValidateReferenceUseCase
+import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation.state.InventoryMode
+import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation.state.PendingReference
+import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation.state.ReferenceInventoryEvent
+import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation.state.ReferenceInventoryItem
+import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation.state.ReferenceInventoryState
+import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation.state.ScannedItem
 import com.veoneer.logisticinventoryapp.scanner.domain.ScannerRepository
 import com.veoneer.logisticinventoryapp.scanner.domain.model.BarcodeScanResult
 import com.veoneer.logisticinventoryapp.scanner.domain.model.TriggerFeedbackEnum
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * ViewModel pour l'écran d'inventaire de références
+ * Architecture moderne avec State + Events
+ */
 @HiltViewModel
 class ReferenceInventoryTypeViewModel @Inject constructor(
-    private val tracabilityApiService: TracabilityDAO,
-    private val scannerRepository: ScannerRepository,
+    private val tracabilityDAO: TracabilityDAO,
     private val inventoryRepository: InventoryRepository,
     private val refRepository: RefRepository,
-    private val numberOfRefIsValid: NumberOfRefIsValidUseCase,
+    private val scannerRepository: ScannerRepository,
+    private val scanBarcodeUseCase: ScanBarcodeUseCase,
+    private val validateReferenceUseCase: ValidateReferenceUseCase,
+    private val sendInventoryUseCase: SendInventoryUseCase,
     private val mainService: MainService,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    /*
-    init {
-        val json: String = checkNotNull(savedStateHandle["inventory"])
-        val moshi = Moshi.Builder().build()
-        val jsonAdapter = moshi.adapter(InventoryType.ReferenceInventory::class.java).lenient()
-        val inventory: InventoryType.ReferenceInventory = jsonAdapter.fromJson(json)!!
-
-        initValues(inventory)
-    }
-     */
-    init {
-        val inventory  = InventoryType.ReferenceInventory(
+    // État central
+    private val _state = MutableStateFlow(
+        ReferenceInventoryState(
             inventoryNumber = mainService.inventoryNumber,
-            locationCode = mainService.inventoryLocation,
-            reference = "",
-            type = "",
-            quantity = "",
-            designation = "",
-            famille = ""
-        )
-        initValues(inventory)
-    }
-    private lateinit var inventory: InventoryType.ReferenceInventory
-
-    var referenceInventoryState: referenceInventoryState by mutableStateOf(referenceInventoryState())
-        private set
-    var inventoryState by mutableStateOf(
-        InventoryState().copy(
-            inventory = inventory,
-            actionMessage = "Scanner un produit"
+            locationCode = mainService.inventoryLocation
         )
     )
-    var error = mutableStateOf("")
-        private set
+    val state = _state.asStateFlow()
 
-//    var barcodeScanState: BarcodeScanState by mutableStateOf(barcodeScannerHandler.barcodeScanState)
-//        private set
-
+    // États du scanner (réutilisation de l'existant)
     val scannerStateFlow = scannerRepository.scannerStateFlow
+    val barcodeScanState = scannerRepository.barcodeScanState
 
-    var barcodeScanState = scannerRepository.barcodeScanState
+    // Référence en cours d'ajout
+    private var pendingReference: PendingReference? = null
 
-    private fun initValues(referenceInventory: InventoryType.ReferenceInventory) {
-        this.inventory = referenceInventory
+    /**
+     * Point d'entrée unique pour tous les événements UI
+     */
+    fun onEvent(event: ReferenceInventoryEvent) {
+        when (event) {
+            is ReferenceInventoryEvent.BarcodeScanned -> handleBarcodeScan(event.code)
+            is ReferenceInventoryEvent.TypeSelected -> setPendingReferenceType(event.type)
+            is ReferenceInventoryEvent.QuantityEntered -> addReferenceWithQuantity(event.quantity)
+            is ReferenceInventoryEvent.ReferenceRemoved -> removeReference(event.index)
+            is ReferenceInventoryEvent.SendInventory -> sendInventory()
+            is ReferenceInventoryEvent.DismissError -> dismissError()
+            is ReferenceInventoryEvent.ReturnToScanning -> returnToScanning()
+        }
     }
 
-
-    @RequiresApi(Build.VERSION_CODES.O)
+    /**
+     * Gère le scan de code-barre depuis le scanner Zebra
+     */
     fun handleBarcodeScan(barcodeScanResult: BarcodeScanResult) {
-        viewModelScope.launch {
-//            barcodeScanState = barcodeScannerHandler.handleScanResult(barcodeScanResult)
-            when (mainService.refInventoryStepState) {
-                RefInventoryStepEnum.Start -> {
-                    error.value = ""
-                    if (barcodeScanResult.barcodeContent.substring(0, 3) == "30S") {
-                        getFamily(barcodeScanResult.barcodeContent)
-                    } else {
-                        getReference(barcodeScanResult.barcodeContent)
-                    }
-                }
-
-                RefInventoryStepEnum.GetFamily -> {
-                    error.value = ""
-                }
-
-                RefInventoryStepEnum.GetType -> {
-                    error.value = ""
-                }
-
-                RefInventoryStepEnum.GetQuantity -> {
-                    error.value = ""
-                }
-
-                RefInventoryStepEnum.Send -> {
-                    error.value = ""
-                }
-
-                else -> {}
-            }
-
-        }
+        onEvent(ReferenceInventoryEvent.BarcodeScanned(barcodeScanResult.barcodeContent))
     }
 
-    fun onInputChange(newValue: String, someEvent: (String) -> Unit) {
-        try {
-            if (
-                newValue.isNotEmpty()
-            ) {
-                someEvent(newValue)
-            } else {
-                throw Exception("Le champ ne peut être vide")
-            }
-        } catch (e: Exception) {
-            inventoryState = inventoryState.copy(errorMessage = e.message)
-        }
-    }
+    /**
+     * Traite le code-barre scanné
+     */
+    private fun handleBarcodeScan(code: String) = viewModelScope.launch {
+        _state.update { it.copy(isLoading = true, error = null) }
 
-    fun getFamily(data: String) {
-        viewModelScope.launch {
-            inventoryState = try {
-                inventoryState = inventoryState.copy(isLoading = true)
-                val response = refRepository.getFamily(data.toBase64())
-
-                if (!response.isSuccessful) {
-                    throw Exception(response.errorBody()!!.string())
-                }
-                referenceInventoryState.familyList.clear()
-                if(response.body()!!.isEmpty()) {
-                    throw Exception("Aucune information trouvée")
-                }
-                response.body()!!.forEach() {
-                    if (it.typeOfProduct == "SO") {
-                        referenceInventoryState.familyList.add(it)
-                    } else if (it.typeOfProduct == "SF") {
-                        referenceInventoryState.familyList.add(it)
-                    }
-                }
-                inventory.famille = data
-                mainService.refInventoryStepState = RefInventoryStepEnum.GetType
-                error.value = ""
-                inventoryState.copy(
-                    actionMessage = "Famille en cours $data",
-                    inventory = inventory,
-                    isLoading = false,
-                    isSnackbarShowing = true,
-                    snackbarMessage = "Produit $data ajoutée !",
-                    errorMessage = null,
-                    isError = false,
-                )
-            } catch (e: Exception) {
-                error.value = e.message!!
-                inventoryState.copy(
-                    isSnackbarShowing = true,
-                    snackbarMessage = e.message!!,
-                    isLoading = false,
-                    isError = true,
-                )
-            }
-        }
-    }
-
-    fun getType(data: String) {
-        try {
-            if (
-                data.isNotEmpty() && data != "Choisir le type de produit"
-            ) {
-                referenceInventoryState.familyList.forEach() {
-                    if (it.designation == data) {
-                        inventory =
-                            inventory.copy(reference = it.reference, designation = it.designation)
-                    }
-                }
-                mainService.refInventoryStepState = RefInventoryStepEnum.GetQuantity
-                inventoryState = inventoryState.copy(
-                    inventory = inventory,
-                    actionMessage = "Ref°${inventory.reference}"
-                )
-            } else {
-                throw Exception("Le champs ne peut être vide")
-            }
-        } catch (e: Exception) {
-            inventoryState = inventoryState.copy(errorMessage = e.message)
-        }
-    }
-
-    fun getReference(data: String) {
-        viewModelScope.launch {
-            inventoryState = try {
-                inventoryState = inventoryState.copy(isLoading = true)
-                val response = tracabilityApiService.getReferenceAndProductType(data)
-                if (!response.isSuccessful) {
-                    throw Exception(response.errorBody()!!.string())
-                }
-
-                mainService.refInventoryStepState = RefInventoryStepEnum.GetQuantityByScan
-                inventory = inventory.copy(
-                    reference = response.body()!!.Response,
-                    type = response.body()!!.Type
-                )
-                error.value = ""
-                inventoryState.copy(
-                    isLoading = false,
-                    isSnackbarShowing = true,
-                    snackbarMessage = "Produit $data ajoutée !",
-                    errorMessage = null,
-                    actionMessage = "Ref°${response.body()!!.Response}",
-                    isError = false,
-                )
-            } catch (e: Exception) {
-                scannerRepository.triggerFeedback(TriggerFeedbackEnum.ERROR)
-                error.value = e.message!!
-                inventoryState.copy(
-                    isSnackbarShowing = true,
-                    snackbarMessage = e.message!!,
-                    isError = true,
-                    isLoading = false
-                )
-            }
-        }
-    }
-
-    fun getQuantityRef() {
-        inventoryState.copy(isLoading = true)
-        viewModelScope.launch {
-            inventoryState = try {
-                if (referenceInventoryState.userInput.isEmpty()) {
-                    throw Exception("Les champs ne peuvent pas être vide")
-                }
-                inventory = inventory.copy(quantity = referenceInventoryState.userInput)
-
-                referenceInventoryState = referenceInventoryState.copy(userInput = "")
-                referenceInventoryState.refList.add(
-                    Reference(
-                        code = inventory.reference,
-                        quantity = inventory.quantity.toInt(),
-                        type = if (inventory.designation == "") inventory.type else inventory.designation.substring(
-                            0,
-                            3
+        scanBarcodeUseCase(code)
+            .onSuccess { scannedItem ->
+                when (scannedItem) {
+                    is ScannedItem.Family -> {
+                        pendingReference = PendingReference.FromFamily(
+                            familyCode = scannedItem.familyCode,
+                            availableTypes = scannedItem.types
                         )
+                        _state.update {
+                            it.copy(
+                                mode = InventoryMode.SelectingType(
+                                    familyCode = scannedItem.familyCode,
+                                    types = scannedItem.types
+                                ),
+                                isLoading = false
+                            )
+                        }
+                        scannerRepository.triggerFeedback(TriggerFeedbackEnum.SUCCESS)
+                    }
+
+                    is ScannedItem.Reference -> {
+                        pendingReference = PendingReference.FromScan(
+                            code = scannedItem.code,
+                            type = scannedItem.type
+                        )
+                        _state.update {
+                            it.copy(
+                                mode = InventoryMode.EditingQuantity(
+                                    referenceCode = scannedItem.code,
+                                    referenceType = scannedItem.type
+                                ),
+                                isLoading = false
+                            )
+                        }
+                        scannerRepository.triggerFeedback(TriggerFeedbackEnum.SUCCESS)
+                    }
+                }
+            }
+            .onFailure { error ->
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        error = error.message ?: "Erreur de scan"
                     )
-                )
-                inventory = inventory.copy(designation = "")
-                mainService.refInventoryStepState = RefInventoryStepEnum.Start
-                error.value = ""
-                inventoryState.copy(
-                    inventory = inventory,
-                    errorMessage = null,
-                    isLoading = false,
-                    isError = false,
-                    actionMessage = "Scanner un produit"
-                )
-            } catch (e: Exception) {
-                error.value = e.message!!
-                inventoryState.copy(
-                    isSnackbarShowing = true,
-                    snackbarMessage = e.message!!,
-                    isLoading = false,
-                    isError = true,
-                )
-            }
-        }
-    }
-
-    fun sendInventory() {
-        viewModelScope.launch {
-            inventoryState = inventoryState.copy(isLoading = true)
-            inventoryState = try {
-                referenceInventoryState.refList.forEach {
-                    val response = inventoryRepository.createReferenceInventory(
-                        MovexReferenceInventory(
-                            inventoryNumber = inventory.inventoryNumber,
-                            locationCode = inventory.locationCode,
-                            reference = it.code,
-                            numberOfUnits = "1",
-                            quantityByUnit = it.quantity.toString()
-                        )
-                    )
-                    if (!response.isSuccessful) {
-                        inventoryState.copy(
-                            isSnackbarShowing = true,
-                            snackbarMessage = response.errorBody()!!.string(),
-                            isError = true,
-                        )
-                    }
                 }
-                referenceInventoryState.refList.clear()
-                resetState()
-                mainService.refInventoryStepState = RefInventoryStepEnum.Start
-                error.value = ""
-                inventoryState.copy(
-                    isLoading = false,
-                    isSnackbarShowing = true,
-                    snackbarMessage = "Référence inventoriée !",
-                    isError = false,
-                    actionMessage = "Scanner un nouveau produit.",
-                )
-            } catch (e: Exception) {
                 scannerRepository.triggerFeedback(TriggerFeedbackEnum.ERROR)
-                error.value = e.message!!
-                inventoryState.copy(
-                    errorMessage = e.localizedMessage,
-                    isSnackbarShowing = true,
-                    snackbarMessage = e.message!!,
-                    isError = true,
-                )
             }
-        }
     }
 
-    fun onQuantityInputChange(newValue: String) {
-        try {
-            referenceInventoryState = referenceInventoryState.copy(userInput = newValue)
-        } catch (e: Exception) {
-            inventoryState = inventoryState.copy(errorMessage = e.message)
-        }
-    }
+    /**
+     * Définit le type sélectionné pour une famille
+     */
+    private fun setPendingReferenceType(type: Family) {
+        val pending = pendingReference as? PendingReference.FromFamily ?: return
 
-    fun dismissSnackbar() {
-        inventoryState = inventoryState.copy(isSnackbarShowing = false)
-    }
-
-    fun resetState() {
-        inventoryState = inventoryState.copy(
-            alertDialogIsOpen = false,
-            errorMessage = null,
+        pendingReference = pending.copy(
+            selectedReference = type.reference,
+            selectedType = type.designation
         )
-        referenceInventoryState.familyList.clear()
-        referenceInventoryState = referenceInventoryState.copy(userInput = "")
-        scannerRepository.resetBarcodeScanResult()
-    }
 
-    fun onRefInputChange(newValue: String) {
-        referenceInventoryState = referenceInventoryState.copy(userInput = newValue)
-    }
-
-    fun validStep() {
-        if (mainService.refInventoryStepState == RefInventoryStepEnum.Start) {
-            inventoryState = inventoryState.copy(alertDialogIsOpen = true, errorMessage = "", isError = false)
+        _state.update {
+            it.copy(
+                mode = InventoryMode.EditingQuantity(
+                    referenceCode = type.reference,
+                    referenceType = type.designation
+                )
+            )
         }
+    }
+
+    /**
+     * Ajoute la référence avec la quantité saisie
+     */
+    private fun addReferenceWithQuantity(quantity: Int) = viewModelScope.launch {
+        val pending = pendingReference ?: return@launch
+
+        if (quantity <= 0) {
+            _state.update { it.copy(error = "La quantité doit être supérieure à 0") }
+            return@launch
+        }
+
+        val newItem = when (pending) {
+            is PendingReference.FromFamily -> {
+                val ref = pending.selectedReference
+                val type = pending.selectedType
+                if (ref == null || type == null) {
+                    _state.update { it.copy(error = "Veuillez sélectionner un type") }
+                    return@launch
+                }
+                ReferenceInventoryItem(
+                    code = ref,
+                    quantity = quantity,
+                    type = type.take(3)
+                )
+            }
+
+            is PendingReference.FromScan -> ReferenceInventoryItem(
+                code = pending.code,
+                quantity = quantity,
+                type = pending.type
+            )
+        }
+
+        validateReferenceUseCase(newItem.code, _state.value.scannedReferences)
+            .onSuccess {
+                _state.update { state ->
+                    state.copy(
+                        scannedReferences = state.scannedReferences + newItem,
+                        mode = InventoryMode.Scanning,
+                        successMessage = "Référence ${newItem.code} ajoutée"
+                    )
+                }
+                pendingReference = null
+            }
+            .onFailure { error ->
+                _state.update { it.copy(error = error.message) }
+            }
+    }
+
+    /**
+     * Supprime une référence de la liste
+     */
+    private fun removeReference(index: Int) {
+        _state.update { state ->
+            state.copy(
+                scannedReferences = state.scannedReferences.filterIndexed { i, _ -> i != index }
+            )
+        }
+    }
+
+    /**
+     * Envoie l'inventaire au backend
+     */
+    private fun sendInventory() = viewModelScope.launch {
+        _state.update { it.copy(isLoading = true, error = null) }
+
+        val currentState = _state.value
+
+        sendInventoryUseCase(
+            inventoryNumber = currentState.inventoryNumber,
+            locationCode = currentState.locationCode,
+            references = currentState.scannedReferences
+        )
+            .onSuccess {
+                mainService.informationMessage = "Envoi réussi"
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        isComplete = true,
+                        successMessage = "Inventaire envoyé avec succès"
+                    )
+                }
+            }
+            .onFailure { error ->
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        error = error.message ?: "Erreur d'envoi"
+                    )
+                }
+                scannerRepository.triggerFeedback(TriggerFeedbackEnum.ERROR)
+            }
+    }
+
+    /**
+     * Efface le message d'erreur
+     */
+    private fun dismissError() {
+        _state.update { it.copy(error = null, successMessage = null) }
+    }
+
+    /**
+     * Retour au mode scan
+     */
+    private fun returnToScanning() {
+        pendingReference = null
+        _state.update { it.copy(mode = InventoryMode.Scanning) }
     }
 }
