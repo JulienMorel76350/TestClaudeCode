@@ -89,55 +89,66 @@ class ReferenceInventoryTypeViewModel @Inject constructor(
      * Traite le code-barre scanné
      */
     private fun handleBarcodeScan(code: String) = viewModelScope.launch {
-        _state.update { it.copy(isLoading = true, error = null) }
+        try {
+            _state.update { it.copy(isLoading = true, error = null) }
 
-        scanBarcodeUseCase(code)
-            .onSuccess { scannedItem ->
-                when (scannedItem) {
-                    is ScannedItem.Family -> {
-                        pendingReference = PendingReference.FromFamily(
-                            familyCode = scannedItem.familyCode,
-                            availableTypes = scannedItem.types
-                        )
-                        _state.update {
-                            it.copy(
-                                mode = InventoryMode.SelectingType(
-                                    familyCode = scannedItem.familyCode,
-                                    types = scannedItem.types
-                                ),
-                                isLoading = false
+            scanBarcodeUseCase(code)
+                .onSuccess { scannedItem ->
+                    when (scannedItem) {
+                        is ScannedItem.Family -> {
+                            pendingReference = PendingReference.FromFamily(
+                                familyCode = scannedItem.familyCode,
+                                availableTypes = scannedItem.types
                             )
+                            _state.update {
+                                it.copy(
+                                    mode = InventoryMode.SelectingType(
+                                        familyCode = scannedItem.familyCode,
+                                        types = scannedItem.types
+                                    ),
+                                    isLoading = false
+                                )
+                            }
+                            scannerRepository.triggerFeedback(TriggerFeedbackEnum.SUCCESS)
                         }
-                        scannerRepository.triggerFeedback(TriggerFeedbackEnum.SUCCESS)
-                    }
 
-                    is ScannedItem.Reference -> {
-                        pendingReference = PendingReference.FromScan(
-                            code = scannedItem.code,
-                            type = scannedItem.type
-                        )
-                        _state.update {
-                            it.copy(
-                                mode = InventoryMode.EditingQuantity(
-                                    referenceCode = scannedItem.code,
-                                    referenceType = scannedItem.type
-                                ),
-                                isLoading = false
+                        is ScannedItem.Reference -> {
+                            pendingReference = PendingReference.FromScan(
+                                code = scannedItem.code,
+                                type = scannedItem.type
                             )
+                            _state.update {
+                                it.copy(
+                                    mode = InventoryMode.EditingQuantity(
+                                        referenceCode = scannedItem.code,
+                                        referenceType = scannedItem.type
+                                    ),
+                                    isLoading = false
+                                )
+                            }
+                            scannerRepository.triggerFeedback(TriggerFeedbackEnum.SUCCESS)
                         }
-                        scannerRepository.triggerFeedback(TriggerFeedbackEnum.SUCCESS)
                     }
                 }
-            }
-            .onFailure { error ->
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        error = error.message ?: "Erreur de scan"
-                    )
+                .onFailure { error ->
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            error = error.message ?: "Erreur de scan"
+                        )
+                    }
+                    scannerRepository.triggerFeedback(TriggerFeedbackEnum.ERROR)
                 }
-                scannerRepository.triggerFeedback(TriggerFeedbackEnum.ERROR)
+        } catch (e: Exception) {
+            // Catch global pour éviter tout crash
+            _state.update {
+                it.copy(
+                    isLoading = false,
+                    error = e.message ?: "Erreur inattendue"
+                )
             }
+            scannerRepository.triggerFeedback(TriggerFeedbackEnum.ERROR)
+        }
     }
 
     /**

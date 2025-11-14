@@ -22,15 +22,25 @@ class ScanBarcodeUseCase @Inject constructor(
                 val response = refRepository.getFamily(code.toBase64())
 
                 if (!response.isSuccessful) {
-                    throw Exception(response.errorBody()?.string() ?: "Erreur lors de la récupération de la famille")
+                    val errorMsg = try {
+                        response.errorBody()?.string()
+                    } catch (e: Exception) {
+                        null
+                    }
+                    throw Exception(errorMsg ?: "Famille inconnue ou introuvable")
                 }
 
-                val familyList = response.body()?.filter {
+                val body = response.body()
+                if (body == null || body.isEmpty()) {
+                    throw Exception("Famille '$code' introuvable")
+                }
+
+                val familyList = body.filter {
                     it.typeOfProduct == "SO" || it.typeOfProduct == "SF"
-                } ?: emptyList()
+                }
 
                 if (familyList.isEmpty()) {
-                    throw Exception("Aucune information trouvée pour cette famille")
+                    throw Exception("Aucun produit trouvé pour la famille '$code'")
                 }
 
                 ScannedItem.Family(
@@ -43,11 +53,16 @@ class ScanBarcodeUseCase @Inject constructor(
                 val response = tracabilityDAO.getReferenceAndProductType(code)
 
                 if (!response.isSuccessful) {
-                    throw Exception(response.errorBody()?.string() ?: "Référence invalide")
+                    val errorMsg = try {
+                        response.errorBody()?.string()
+                    } catch (e: Exception) {
+                        null
+                    }
+                    throw Exception(errorMsg ?: "Référence produit introuvable")
                 }
 
                 val body = response.body()
-                    ?: throw Exception("Aucune donnée reçue pour cette référence")
+                    ?: throw Exception("Référence '$code' introuvable")
 
                 ScannedItem.Reference(
                     code = body.Response,
