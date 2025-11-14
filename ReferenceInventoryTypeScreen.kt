@@ -13,7 +13,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.veoneer.logisticinventoryapp.core.presentation.components.SystemBroadcastReceiverHandler
-import com.veoneer.logisticinventoryapp.core.presentation.components.global.ScannerInput
 import com.veoneer.logisticinventoryapp.core.router.model.Screen
 import com.veoneer.logisticinventoryapp.core.service.MainViewModel
 import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation.components.*
@@ -199,33 +198,24 @@ private fun ScanningModeContent(
     onEvent: (ReferenceInventoryEvent) -> Unit,
     context: Context
 ) {
-    var manualInput by remember { mutableStateOf("") }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(12.dp)
     ) {
         // Instruction
         ScanInstructionCard()
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Saisie manuelle pour les familles
-        ScannerInput(
-            "Entrer une famille (IL, VW, AA, 30S...)",
-            { newValue, callback ->
-                manualInput = newValue
-                callback(newValue)
-            },
-            { value ->
-                if (value.isNotEmpty()) {
-                    onEvent(ReferenceInventoryEvent.BarcodeScanned(value))
-                }
+        // Saisie manuelle pour les familles - Version compacte
+        CompactFamilyInput(
+            onSubmit = { value ->
+                onEvent(ReferenceInventoryEvent.BarcodeScanned(value))
             }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Liste ou message vide
         if (state.scannedReferences.isEmpty()) {
@@ -239,7 +229,7 @@ private fun ScanningModeContent(
                 modifier = Modifier.weight(1f)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Bouton envoyer
             SendInventoryButton(

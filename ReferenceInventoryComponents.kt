@@ -30,7 +30,7 @@ import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentat
 import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation.state.ReferenceInventoryItem
 
 /**
- * Message d'instruction pour le scan
+ * Message d'instruction pour le scan - Version compacte
  */
 @Composable
 fun ScanInstructionCard() {
@@ -38,26 +38,77 @@ fun ScanInstructionCard() {
         modifier = Modifier.fillMaxWidth(),
         backgroundColor = MaterialTheme.colors.primary.copy(alpha = 0.1f),
         elevation = 0.dp,
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(8.dp)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = Icons.Default.QrCodeScanner,
                 contentDescription = null,
                 tint = MaterialTheme.colors.primary,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(20.dp)
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Scannez un code-barre produit ou entrez une famille (IL, VW, AA...)",
-                style = MaterialTheme.typography.body1,
+                text = "Scanner un produit ou entrer une famille",
+                style = MaterialTheme.typography.body2,
                 fontWeight = FontWeight.Medium
             )
         }
     }
+}
+
+/**
+ * Input compact personnalisé pour la saisie manuelle
+ */
+@Composable
+fun CompactFamilyInput(
+    onSubmit: (String) -> Unit
+) {
+    var inputValue by remember { mutableStateOf("") }
+
+    OutlinedTextField(
+        value = inputValue,
+        onValueChange = { inputValue = it },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp),
+        placeholder = {
+            Text(
+                text = "Famille (IL, VW, AA...)",
+                style = MaterialTheme.typography.body2
+            )
+        },
+        trailingIcon = {
+            IconButton(
+                onClick = {
+                    if (inputValue.isNotEmpty()) {
+                        onSubmit(inputValue)
+                        inputValue = ""
+                    }
+                },
+                enabled = inputValue.isNotEmpty()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Send,
+                    contentDescription = "Valider",
+                    tint = if (inputValue.isNotEmpty())
+                        MaterialTheme.colors.primary
+                    else
+                        Color.Gray
+                )
+            }
+        },
+        singleLine = true,
+        shape = RoundedCornerShape(8.dp),
+        colors = TextFieldDefaults.outlinedTextFieldColors(
+            focusedBorderColor = MaterialTheme.colors.primary,
+            unfocusedBorderColor = Color(0xFFE5E7EB)
+        ),
+        textStyle = MaterialTheme.typography.body2
+    )
 }
 
 /**
@@ -68,26 +119,26 @@ fun EmptyStateMessage() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(32.dp),
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             imageVector = Icons.Default.QrCodeScanner,
             contentDescription = null,
             tint = Color.Gray,
-            modifier = Modifier.size(64.dp)
+            modifier = Modifier.size(48.dp)
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "Aucune référence scannée",
-            style = MaterialTheme.typography.h6,
+            text = "Aucune référence",
+            style = MaterialTheme.typography.subtitle1,
             color = Color.Gray,
             textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Commencez par scanner un code-barre",
-            style = MaterialTheme.typography.body2,
+            text = "Scanner ou entrer une famille",
+            style = MaterialTheme.typography.caption,
             color = Color.Gray,
             textAlign = TextAlign.Center
         )
@@ -440,15 +491,15 @@ fun ScannedReferencesListGrouped(
 
     Column(modifier = modifier) {
         Text(
-            text = "Références scannées (${groupedReferences.size} ref, ${references.size} entrées)",
-            style = MaterialTheme.typography.h6,
+            text = "Références (${groupedReferences.size} • ${references.size} entrées)",
+            style = MaterialTheme.typography.subtitle1,
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             itemsIndexed(groupedReferences) { _, group ->
                 GroupedReferenceCard(
@@ -470,7 +521,7 @@ fun ScannedReferencesListGrouped(
 }
 
 /**
- * Carte pour une référence groupée
+ * Carte pour une référence groupée - Version compacte sur une ligne
  */
 @Composable
 fun GroupedReferenceCard(
@@ -480,68 +531,89 @@ fun GroupedReferenceCard(
     Surface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(2.dp, Color(0xFFE5E7EB)),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
         color = Color.White,
-        elevation = 2.dp
+        elevation = 1.dp
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Référence et type
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = group.reference,
-                    fontSize = 16.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
                     color = Color(0xFF1F2937)
                 )
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = group.type,
-                    fontSize = 12.sp,
-                    color = Color(0xFF6B7280),
-                    fontWeight = FontWeight.Medium
+                    fontSize = 11.sp,
+                    color = Color(0xFF6B7280)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = group.itemCount.toString(),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF667EEA)
-                        )
-                        Text(
-                            text = if (group.itemCount > 1) "entrées" else "entrée",
-                            fontSize = 10.sp,
-                            color = Color(0xFF6B7280),
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = group.totalQuantity.toString(),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF667EEA)
-                        )
-                        Text(
-                            text = "pièces",
-                            fontSize = 10.sp,
-                            color = Color(0xFF6B7280),
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+            }
+
+            // Nombre d'entrées
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(0xFF667EEA).copy(alpha = 0.1f),
+                modifier = Modifier.padding(horizontal = 6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = group.itemCount.toString(),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF667EEA)
+                    )
+                    Text(
+                        text = "×",
+                        fontSize = 11.sp,
+                        color = Color(0xFF667EEA)
+                    )
                 }
             }
+
+            // Quantité totale
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(0xFF10B981).copy(alpha = 0.1f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = group.totalQuantity.toString(),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF10B981)
+                    )
+                    Text(
+                        text = "pcs",
+                        fontSize = 10.sp,
+                        color = Color(0xFF10B981)
+                    )
+                }
+            }
+
+            // Chevron
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = Color(0xFF9CA3AF),
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier
+                    .size(18.dp)
+                    .padding(start = 4.dp)
             )
         }
     }
