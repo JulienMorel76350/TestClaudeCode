@@ -15,10 +15,7 @@ class ValidateReferenceUseCase @Inject constructor() {
         require(reference.isNotBlank()) {
             "La référence ne peut pas être vide"
         }
-
-        val alreadyExists = existingReferences.any { it.code == reference }
-        require(!alreadyExists) {
-            "Cette référence est déjà inventoriée"
-        }
+        // Note: On permet les doublons car le système de groupement
+        // est fait pour gérer plusieurs entrées de la même référence
     }
 }
