@@ -47,7 +47,7 @@ fun ScanInstructionCard() {
             )
             Spacer(modifier = Modifier.width(12.dp))
             Text(
-                text = "Scannez un code-barre ou entrez une famille (30S...)",
+                text = "Scannez un code-barre produit ou entrez une famille (IL, VW, AA...)",
                 style = MaterialTheme.typography.body1,
                 fontWeight = FontWeight.Medium
             )

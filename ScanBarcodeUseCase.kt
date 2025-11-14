@@ -17,8 +17,8 @@ class ScanBarcodeUseCase @Inject constructor(
 
     suspend operator fun invoke(code: String): Result<ScannedItem> = runCatching {
         when {
-            // C'est un code famille (commence par "30" et moins de 8 caractères OU commence par "30S")
-            code.startsWith("30") && (code.length < 8 || code.startsWith("30S")) -> {
+            // C'est un code famille (moins de 8 caractères : IL, VW, AA, 30, 30S, etc.)
+            code.length < 8 -> {
                 val response = refRepository.getFamily(code.toBase64())
 
                 if (!response.isSuccessful) {
@@ -38,8 +38,8 @@ class ScanBarcodeUseCase @Inject constructor(
                     types = familyList
                 )
             }
-            // C'est une référence produit (doit avoir au moins 8 caractères)
-            code.length >= 8 -> {
+            // C'est une référence produit (au moins 8 caractères)
+            else -> {
                 val response = tracabilityDAO.getReferenceAndProductType(code)
 
                 if (!response.isSuccessful) {
@@ -53,10 +53,6 @@ class ScanBarcodeUseCase @Inject constructor(
                     code = body.Response,
                     type = body.Type
                 )
-            }
-            // Code trop court pour être un produit
-            else -> {
-                throw Exception("Code invalide : les références produit doivent avoir au moins 8 caractères")
             }
         }
     }

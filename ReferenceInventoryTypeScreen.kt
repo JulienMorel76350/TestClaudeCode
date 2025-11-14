@@ -213,7 +213,7 @@ private fun ScanningModeContent(
 
         // Saisie manuelle pour les familles
         ScannerInput(
-            "Entrer une famille (30S...)",
+            "Entrer une famille (IL, VW, AA, 30S...)",
             { newValue, callback ->
                 manualInput = newValue
                 callback(newValue)
