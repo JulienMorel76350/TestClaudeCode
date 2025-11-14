@@ -97,18 +97,39 @@ class ReferenceInventoryTypeViewModel @Inject constructor(
                 .onSuccess { scannedItem ->
                     when (scannedItem) {
                         is ScannedItem.Family -> {
-                            pendingReference = PendingReference.FromFamily(
-                                familyCode = scannedItem.familyCode,
-                                availableTypes = scannedItem.types
-                            )
-                            _state.update {
-                                it.copy(
-                                    mode = InventoryMode.SelectingType(
-                                        familyCode = scannedItem.familyCode,
-                                        types = scannedItem.types
-                                    ),
-                                    isLoading = false
+                            // Si un seul type disponible, le sélectionner automatiquement
+                            if (scannedItem.types.size == 1) {
+                                val singleType = scannedItem.types.first()
+                                pendingReference = PendingReference.FromFamily(
+                                    familyCode = scannedItem.familyCode,
+                                    availableTypes = scannedItem.types,
+                                    selectedReference = singleType.reference,
+                                    selectedType = singleType.designation
                                 )
+                                _state.update {
+                                    it.copy(
+                                        mode = InventoryMode.EditingQuantity(
+                                            referenceCode = singleType.reference,
+                                            referenceType = singleType.designation
+                                        ),
+                                        isLoading = false
+                                    )
+                                }
+                            } else {
+                                // Plusieurs types disponibles, afficher le modal de sélection
+                                pendingReference = PendingReference.FromFamily(
+                                    familyCode = scannedItem.familyCode,
+                                    availableTypes = scannedItem.types
+                                )
+                                _state.update {
+                                    it.copy(
+                                        mode = InventoryMode.SelectingType(
+                                            familyCode = scannedItem.familyCode,
+                                            types = scannedItem.types
+                                        ),
+                                        isLoading = false
+                                    )
+                                }
                             }
                             scannerRepository.triggerFeedback(TriggerFeedbackEnum.SUCCESS)
                         }
