@@ -231,10 +231,10 @@ private fun ScanningModeContent(
         if (state.scannedReferences.isEmpty()) {
             EmptyStateMessage()
         } else {
-            ScannedReferencesList(
+            ScannedReferencesListGrouped(
                 references = state.scannedReferences,
-                onRemove = { index ->
-                    onEvent(ReferenceInventoryEvent.ReferenceRemoved(index))
+                onRemoveItem = { id ->
+                    onEvent(ReferenceInventoryEvent.ReferenceRemovedById(id))
                 },
                 modifier = Modifier.weight(1f)
             )

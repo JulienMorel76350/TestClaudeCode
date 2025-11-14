@@ -37,7 +37,19 @@ sealed class InventoryMode {
 data class ReferenceInventoryItem(
     val code: String,
     val quantity: Int,
-    val type: String
+    val type: String,
+    val id: String = java.util.UUID.randomUUID().toString() // ID unique pour chaque entrée
+)
+
+/**
+ * Groupe de références identiques
+ */
+data class GroupedReference(
+    val reference: String,
+    val type: String,
+    val itemCount: Int,           // Nombre d'entrées
+    val totalQuantity: Int,       // Quantité totale
+    val items: List<ReferenceInventoryItem> // Détails de chaque entrée
 )
 
 /**
@@ -80,6 +92,7 @@ sealed class ReferenceInventoryEvent {
     data class TypeSelected(val type: Family) : ReferenceInventoryEvent()
     data class QuantityEntered(val quantity: Int) : ReferenceInventoryEvent()
     data class ReferenceRemoved(val index: Int) : ReferenceInventoryEvent()
+    data class ReferenceRemovedById(val id: String) : ReferenceInventoryEvent()
     object SendInventory : ReferenceInventoryEvent()
     object DismissError : ReferenceInventoryEvent()
     object ReturnToScanning : ReferenceInventoryEvent()

@@ -1,5 +1,6 @@
 package com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -17,11 +19,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.veoneer.logisticinventoryapp.core.domain.model.Family
+import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation.state.GroupedReference
 import com.veoneer.logisticinventoryapp.referenceInventoryType_feature.presentation.state.ReferenceInventoryItem
 
 /**
@@ -398,4 +403,269 @@ fun QuantityInputModal(
             }
         }
     )
+}
+
+/**
+ * Fonction helper pour grouper les références par code
+ */
+fun groupReferencesByCode(references: List<ReferenceInventoryItem>): List<GroupedReference> {
+    return references
+        .groupBy { it.code }
+        .map { (code, items) ->
+            GroupedReference(
+                reference = code,
+                type = items.first().type,
+                itemCount = items.size,
+                totalQuantity = items.sumOf { it.quantity },
+                items = items
+            )
+        }
+        .sortedByDescending { it.totalQuantity }
+}
+
+/**
+ * Liste des références scannées avec groupement
+ */
+@Composable
+fun ScannedReferencesListGrouped(
+    references: List<ReferenceInventoryItem>,
+    onRemoveItem: (String) -> Unit, // Supprime par ID
+    modifier: Modifier = Modifier
+) {
+    val groupedReferences = remember(references) {
+        groupReferencesByCode(references)
+    }
+
+    var selectedGroup by remember { mutableStateOf<GroupedReference?>(null) }
+
+    Column(modifier = modifier) {
+        Text(
+            text = "Références scannées (${groupedReferences.size} ref, ${references.size} entrées)",
+            style = MaterialTheme.typography.h6,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            itemsIndexed(groupedReferences) { _, group ->
+                GroupedReferenceCard(
+                    group = group,
+                    onClick = { selectedGroup = group }
+                )
+            }
+        }
+    }
+
+    // Modal de détails
+    selectedGroup?.let { group ->
+        ReferenceDetailsModal(
+            group = group,
+            onDismiss = { selectedGroup = null },
+            onRemoveItem = onRemoveItem
+        )
+    }
+}
+
+/**
+ * Carte pour une référence groupée
+ */
+@Composable
+fun GroupedReferenceCard(
+    group: GroupedReference,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(2.dp, Color(0xFFE5E7EB)),
+        color = Color.White,
+        elevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = group.reference,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    color = Color(0xFF1F2937)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = group.type,
+                    fontSize = 12.sp,
+                    color = Color(0xFF6B7280),
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = group.itemCount.toString(),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF667EEA)
+                        )
+                        Text(
+                            text = if (group.itemCount > 1) "entrées" else "entrée",
+                            fontSize = 10.sp,
+                            color = Color(0xFF6B7280),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = group.totalQuantity.toString(),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF667EEA)
+                        )
+                        Text(
+                            text = "pièces",
+                            fontSize = 10.sp,
+                            color = Color(0xFF6B7280),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = Color(0xFF9CA3AF),
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Modal de détails pour une référence groupée
+ */
+@Composable
+fun ReferenceDetailsModal(
+    group: GroupedReference,
+    onDismiss: () -> Unit,
+    onRemoveItem: (String) -> Unit
+) {
+    var itemToDelete by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text(
+                    text = group.reference,
+                    style = MaterialTheme.typography.h6,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+                Text(
+                    text = "${group.itemCount} entrée(s) • ${group.totalQuantity} pièces total",
+                    style = MaterialTheme.typography.caption,
+                    color = Color.Gray
+                )
+            }
+        },
+        text = {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                itemsIndexed(group.items) { index, item ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        backgroundColor = Color(0xFFF9FAFB),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Entrée #${index + 1}",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = "${item.quantity} pièces",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF667EEA)
+                                    )
+                                    Text(
+                                        text = "•",
+                                        fontSize = 14.sp,
+                                        color = Color.Gray
+                                    )
+                                    Text(
+                                        text = item.type,
+                                        fontSize = 14.sp,
+                                        color = Color(0xFF6B7280)
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = { itemToDelete = item.id }
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Supprimer",
+                                    tint = Color(0xFFEF4444)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Fermer")
+            }
+        },
+        dismissButton = null
+    )
+
+    // Dialogue de confirmation de suppression
+    itemToDelete?.let { itemId ->
+        AlertDialog(
+            onDismissRequest = { itemToDelete = null },
+            title = { Text("Confirmer la suppression") },
+            text = { Text("Voulez-vous vraiment supprimer cette entrée ?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onRemoveItem(itemId)
+                        itemToDelete = null
+                        // Si c'était la dernière entrée du groupe, fermer le modal
+                        if (group.items.size == 1) {
+                            onDismiss()
+                        }
+                    }
+                ) {
+                    Text("Supprimer")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemToDelete = null }) {
+                    Text("Annuler")
+                }
+            }
+        )
+    }
 }

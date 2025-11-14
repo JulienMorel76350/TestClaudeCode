@@ -72,6 +72,7 @@ class ReferenceInventoryTypeViewModel @Inject constructor(
             is ReferenceInventoryEvent.TypeSelected -> setPendingReferenceType(event.type)
             is ReferenceInventoryEvent.QuantityEntered -> addReferenceWithQuantity(event.quantity)
             is ReferenceInventoryEvent.ReferenceRemoved -> removeReference(event.index)
+            is ReferenceInventoryEvent.ReferenceRemovedById -> removeReferenceById(event.id)
             is ReferenceInventoryEvent.SendInventory -> sendInventory()
             is ReferenceInventoryEvent.DismissError -> dismissError()
             is ReferenceInventoryEvent.ReturnToScanning -> returnToScanning()
@@ -222,12 +223,23 @@ class ReferenceInventoryTypeViewModel @Inject constructor(
     }
 
     /**
-     * Supprime une référence de la liste
+     * Supprime une référence de la liste par index
      */
     private fun removeReference(index: Int) {
         _state.update { state ->
             state.copy(
                 scannedReferences = state.scannedReferences.filterIndexed { i, _ -> i != index }
+            )
+        }
+    }
+
+    /**
+     * Supprime une référence de la liste par ID
+     */
+    private fun removeReferenceById(id: String) {
+        _state.update { state ->
+            state.copy(
+                scannedReferences = state.scannedReferences.filter { it.id != id }
             )
         }
     }
